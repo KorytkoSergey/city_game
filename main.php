@@ -11,10 +11,10 @@ function greeting($connection){
 }
 
 function connectToDataBase() { // соединяемся с БД
-    $servername = "localhost"; 
-    $username = "root"; 
-    $password = "King_S-68"; 
-    $dbname = "cities_schema"; 
+    $servername = *****; 
+    $username = *****; 
+    $password = *****; 
+    $dbname = *****; 
 
     // Создание подключения
     $connection = new mysqli($servername, $username, $password, $dbname);
