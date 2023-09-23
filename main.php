@@ -1,6 +1,5 @@
 <?php
 header('Content-Type: text/html; charset=utf-8');
-
 function connectToDataBase() { // соединяемся с БД
     $servername = "localhost"; 
     $username = "root"; 
@@ -8,29 +7,18 @@ function connectToDataBase() { // соединяемся с БД
     $dbname = "cities_schema"; 
 
     // Создание подключения
-    $connection = new mysqli($servername, $username, $password, $dbname);
-
-    // Проверка подключения
-    if ($connection->connect_error) {
-        die("Ошибка подключения: " . $connection->connect_error);
+    try {
+        $connection = new mysqli($servername, $username, $password, $dbname);
+    } catch (mysqli_sql_exception $e) {
+        $time = getdate();
+        $errorMessage = "{$time['mday']} {$time['month']} {$time['year']} - {$time['hours']}:{$time['minutes']}:{$time['seconds']} Ошибка подключения: " . $e->getMessage();
+        die($errorMessage);
     }
-
-    echo 'Успешное подключение к базе данных' . "\n";
-
     return $connection; // передача конекта в функция копирования списка
 
 }
 
-function greeting($connection){  // функция приветствия 
-
-    echo 'А кто ты?' . "\n";
-    $name = readline();
-    echo "Привет, $name. Поиграем?" . "\n";
-
-    return $name;
-}
-
-function copyTableCity($connection, $name) { // копирруем таблицу в БД к которой присоединились
+function copyTableCity($connection, $name) { // копируем таблицу в БД к которой присоединились
     $tableName = $name . '_' . 'table'; // создаем имя таблицы смотрящее на игрока
     $citiesForGame = "CREATE TABLE $tableName AS SELECT * FROM cities_table"; // добавить идификатор под игрока, дл уникальной таблицы
 
@@ -44,20 +32,19 @@ function copyTableCity($connection, $name) { // копирруем таблиц�
 
 function newName($connection, $temporaryTable, $fromPlayer) {
     $sql = "SELECT name FROM $temporaryTable where name = '$fromPlayer'"; // сравниваем с таблицей игрока
-    var_dump($fromPlayer);
     $result = $connection->query($sql);
     if ($result === false) {
         die("Ошибка выполнения запроса: " . $connection->error);
     }
     if ($result->num_rows === 0) { // если запрос пустой, то добавляем
         $append = "INSERT INTO new_name (name) VALUES ('$fromPlayer')";
-        echo 'Это новое слово';
+        echo "Это новое слово \n";
         if ($connection->query($append) !== TRUE) {
             echo "Ошибка при добавлении данных: " . $connection->error;
         }
     }
     else {  // иначе сообщаем, что данное слово есть
-        echo 'Такое уже есть';
+        echo "Такое уже есть \n";
     }
 }
 
@@ -83,7 +70,7 @@ function firstStep() {  // функция первого хода
             return $mark;
         }
         else {
-            echo 'Первый ход за копмпьютером';
+            echo 'Первый ход за компьютером';
             return $mark;
         }
     }
@@ -139,6 +126,9 @@ function enterCity() {  // функция для ввода слова игро�
 function answerTable($connection, $tableName, $cityFromPlayer) {  // передаем коннект для SQL запроса
     $sql = "SELECT name FROM $tableName where name like '$cityFromPlayer%'";  // ищем в таблице город на Букву введенного города
     $result = $connection->query($sql);
+    if ($result -> num_rows == 0) {
+        endGame();
+    }
     if ($result === false) {
         die("Ошибка выполнения запроса: " . $connection->error);
     }
@@ -158,40 +148,80 @@ function delName($connection, $temporaryTable, $nameCity) {
         die("Ошибка выполнения запроса: " . $connection->error);
     }
     if ($result->num_rows != 0) {
-        $del = "delete from $temporaryTable where name = '$nameCity'";
+        $delSQL = "delete from $temporaryTable where name = '$nameCity'";
+        $del = $connection->query($delSQL);
+        if ($del === false) {
+            die("Ошибка удаления записи: " . $connection->error);
+        } else {
+            echo "Запись успешно удалена. \n";
+        }
     }
 }
 
+function endGame() {
+    echo "Я не знаю больше городов. Вы победили! \n Выхотите начать сначала? Yes \ No \n";
+    $restart = readline();
+    if ($restart == 'Yes') {
+        crossRoad();
+    }
+    else {
+        die('До скорых встреч!!');
+    }
+
+}
+
+function logGame($connection, $name, $status, $body){
+    $date = date('Y-m-d H:i:s'); // дата формата год - месяц - день
+    $remark = "INSERT INTO table_log(`date`, `name_player`, `status`, `body`) VALUES ('$date', '$name', '$status', '$body')";
+    $result = $connection -> query($remark);
+    if ($result === false) {
+        die("Ошибка удаления записи: " . $connection->error);
+    }
+    echo "$status $date $name $body \n";
+}
+
 function crossRoad() {  // функция распределения (перекресток)
+    echo 'Кто ты?' . "\n";
+    $name = readline();
+    echo "Привет, $name. Поиграем?" . "\n";
+    $status = 'INFO';
     $connection = connectToDataBase();
-    $namePlayer = greeting($connection);
-    $temporaryTable = copyTableCity($connection, $namePlayer);
+    logGame($connection, $name, $status, "$name подключился");
+    $temporaryTable = copyTableCity($connection, $name);
+    logGame($connection, $name, $status, "Таблица для $name успешно создана");
     $chooseStep = firstStep();
     if ($chooseStep == 1) {
+        logGame($connection, $name, $status, "Игру начинает $name");
         $flag = true;
         while ($flag){
             $fromPlayer = enterCity();
+            logGame($connection, $name, $status, "$name выбирает $fromPlayer");
             $chr = mb_substr($fromPlayer, -1);
             newName($connection, $temporaryTable, $fromPlayer);
             delName($connection, $temporaryTable, $fromPlayer);
             $fromPC = answerTable($connection, $temporaryTable, $chr);
+            logGame($connection, $name, $status, "Компьютер выбирает $fromPC");
             delName($connection, $temporaryTable, $fromPC);
         }
 
     }
     else {
+        logGame($connection, $name, $status, "Игру начинает компьютер");
         $rusChr = 'абвгдеёжзиклмнопрстуфхцчшщ';
         $randomIndex = rand(0, mb_strlen($rusChr) - 1);
         $startChr = mb_substr($rusChr, $randomIndex, 1, 'UTF-8');
         $fromPC = answerTable($connection, $temporaryTable, $startChr);
+        logGame($connection, $name, $status, "Компьютер выбирает $fromPC");
         delName($connection, $temporaryTable, $fromPC);
         $flag = true;
         while ($flag){
             $fromPlayer = enterCity();
+            logGame($connection, $name, $status, "$name выбирает $fromPlayer");
             $chr = mb_substr($fromPlayer, -1);
             newName($connection, $temporaryTable, $fromPlayer);
             delName($connection, $temporaryTable, $$fromPlayer);
             $fromPC = answerTable($connection, $temporaryTable, $chr);
+            logGame($connection, $name, $status, "Компьютер выбирает $fromPC");
             delName($connection, $temporaryTable, $fromPC);
         }
 
